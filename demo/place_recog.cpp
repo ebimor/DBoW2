@@ -134,8 +134,7 @@ void  kmeanClusterFeatures(const vector<cv::Mat> &features, int k)
 {
  	srand((unsigned)time(0)); 
 
-	vector<cv::Mat> clusterMean;
-	clusterMean.resize(k);
+	vector<cv::Mat> cluster_mean;
 	std::vector<int> random_indexes; 
 	random_indexes.resize(k);
 	for(int i=0; i<k; ){
@@ -144,13 +143,42 @@ void  kmeanClusterFeatures(const vector<cv::Mat> &features, int k)
     	if(it == random_indexes.end()){
     		i++;
     		random_indexes.push_back(r);
-			clusterMean.push_back(features[r]);
+			cluster_mean.push_back(features[r]);
     	}
-	}	
-
-	for(auto it = features.begin(); it < features.end(); it++){
-		for(auto ij = it+1; ij < features.end(); ij++ ){
-
-		}
 	}
+
+
+	vector<std::vector<int>> cluster_mean_elements; // this holds indexes of the feature points in cluster j<k
+	cluster_mean_elements.resize(k);
+
+
+
+	vector<int> features_index(features.size(), 0); // holds cluster of index of each feature
+
+	for(int j = 0; j < features.size(); j++){
+
+		//FIND THE CLUSTER THAT IS THE CLOSEST TO THE FEATURE J
+		double minDist = 1e9;
+		int cluster_index = 0;
+		for (int i = 0; i < k ; i++){
+			double dist_to_cluster_i = norm(features[j], cluster_mean[i]);
+			if(dist_to_cluster_i < minDist){
+				minDist = dist_to_cluster_i;
+				cluster_index = i;
+			}
+		}
+
+		features_index[j] = cluster_index;
+		cluster_mean_elements[cluster_index].push_back(j);
+
+	}
+	
+	for(int j = 0; j < k; j++){
+		auto mean_f = features[0] - features[0]; 
+		for(int i =0; i < cluster_mean_elements[j].size(); i++){
+			mean_f += features[cluster_mean_elements[j][i]];
+		}
+		cluster_mean[j] = mean_f/cluster_mean_elements[j].size();
+	}
+	
 }

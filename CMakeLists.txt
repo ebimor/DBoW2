@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.0)
 project(DBoW2)
 include(ExternalProject)
 
+set (CMAKE_CXX_STANDARD 11)
+
+
 option(BUILD_DBoW2   "Build DBoW2"            ON)
 option(BUILD_Demo    "Build demo application" ON)
 
