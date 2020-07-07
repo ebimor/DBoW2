@@ -30,7 +30,9 @@ set(DEPENDENCY_DIR ${CMAKE_CURRENT_BINARY_DIR}/dependencies)
 set(DEPENDENCY_INSTALL_DIR ${DEPENDENCY_DIR}/install)
 
 find_package(OpenCV REQUIRED)
-include_directories(${OpenCV_INCLUDE_DIRS})
+find_package(Eigen3 REQUIRED)
+
+include_directories(${OpenCV_INCLUDE_DIRS} ${EIGEN3_INCLUDE_DIR})
 
 if(BUILD_DBoW2)
   set(LIB_SHARED "SHARED")
@@ -39,7 +41,7 @@ if(BUILD_DBoW2)
   endif(WIN32)
   add_library(${PROJECT_NAME} ${LIB_SHARED} ${SRCS})
   target_include_directories(${PROJECT_NAME} PUBLIC include/DBoW2/ include/)
-  target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS})
+  target_link_libraries(${PROJECT_NAME} ${OpenCV_LIBS} ${EIGEN3_INCLUDE_DIR})
   set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 11)
 endif(BUILD_DBoW2)
 
@@ -51,7 +53,7 @@ if(BUILD_Demo)
 
 
   add_executable(place_recog demo/place_recog.cpp)
-  target_link_libraries(place_recog ${PROJECT_NAME} ${OpenCV_LIBS})
+  target_link_libraries(place_recog ${PROJECT_NAME} ${OpenCV_LIBS} ${EIGEN3_INCLUDE_DIR})
   set_target_properties(place_recog PROPERTIES CXX_STANDARD 11)
   file(COPY demo/images DESTINATION ${CMAKE_BINARY_DIR}/)
 
