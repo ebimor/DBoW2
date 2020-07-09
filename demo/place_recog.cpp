@@ -14,7 +14,7 @@
 #include <opencv2/highgui.hpp>
 #include <opencv2/features2d.hpp>
 #include <Eigen/Dense>
-#include <ctime> 
+#include <ctime>
 
 using namespace Eigen;
 using namespace std;
@@ -37,20 +37,27 @@ void wait()
 void loadFeatures(vector<cv::Mat > &features);
 void showFeatures(const vector<cv::KeyPoint>& keypoints, const cv::Mat& image, cv::Scalar color = (0,255,0));
 void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out);
-vector<cv::Mat> kmeanClusterFeatures(const vector<cv::Mat> &features, int k = 500, int max_iteration = 1000, double threshold = 1.0);
+vector<cv::Mat> kmeanClusterFeatures(const vector<cv::Mat> &features, int k = 500, int max_iteration = 100000, double threshold = 1.0);
+vector<vector<double>>  kmeanClusterFeaturesDouble(const vector<vector<double>> &features, int k, int max_iteration, double threshold);
 vector<double> createHistogram(const vector<cv::Mat>& features, const vector<cv::Mat>& cluster_mean);
 int findClosestCluster(const cv::Mat& feature, const vector<cv::Mat>& cluster_mean);
+int findClosestClusterDouble(const vector<double>& feature, const vector<vector<double>>& cluster_mean);
+double cosineSimilarity(const vector<double>& a, const vector<double>& b);
+double L1Similarity(const vector<double>& a, const vector<double>& b);
 
 // ----------------------------------------------------------------------------
 
 int main()
 {
+
   vector<cv::Mat > featuresDB;
   loadFeatures(featuresDB);
 
+  cout<<featuresDB.size()<<endl;
+
     //create the BoW
   int k = 500;
-  vector<cv::Mat> cluster_mean = kmeanClusterFeatures(featuresDB, k, 10, 10);
+  vector<cv::Mat> cluster_mean = kmeanClusterFeatures(featuresDB, k, 1000, 0.01);
 
   cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
@@ -69,9 +76,47 @@ int main()
     orb->detectAndCompute(image, mask, keypoints, descriptors);
     changeStructure(descriptors, features);
 
-    hist_of_images.push_back(createHistogram(features, cluster_mean));
-
+	hist_of_images.push_back(createHistogram(features, cluster_mean));
   }
+
+  for(int i = 0; i < NIMAGES; i++){
+  	for(int j = 0; j < NIMAGES; j++){
+  		cout<<cosineSimilarity(hist_of_images[i], hist_of_images[j])<<" ";
+  	}
+  	cout<<endl;
+  }
+
+  cout<<endl<<endl;
+
+   for(int i = 0; i < NIMAGES; i++){
+  	for(int j = 0; j < NIMAGES; j++){
+  		cout<<L1Similarity(hist_of_images[i], hist_of_images[j])<<" ";
+  	}
+  	cout<<endl;
+  }
+
+
+  /*
+  vector<vector<double>> data;
+  for(int k = 0 ; k< 1000; k++){
+  	std::vector<double> v(2,0);
+  	v[1] = rand() % 10;
+  	v[0] = rand() % 10;
+  	data.push_back(v);
+  }
+
+  for(int k = 0 ; k< 1000; k++){
+  	std::vector<double> v(2,0);
+  	v[1] = rand() % 10+30;
+  	v[0] = rand() % 10+30;
+  	data.push_back(v);
+  }
+
+  vector<vector<double>> cluster_mean = kmeanClusterFeaturesDouble(data, 2, 100000, 1);
+
+  cout<<cluster_mean[0][0]<<" "<<cluster_mean[0][1]<<endl;
+  cout<<cluster_mean[1][0]<<" "<<cluster_mean[1][1]<<endl;
+  */
 
   return 0;
 }
@@ -174,26 +219,66 @@ vector<cv::Mat>  kmeanClusterFeatures(const vector<cv::Mat> &features, int k, in
 		vector<std::vector<int>> cluster_mean_elements; // this holds indexes of the feature points in cluster j<k
 		cluster_mean_elements.resize(k);
 
+		//find the closest cluster to feature j, store the result in cluster_mean_elements
+		for(size_t j = 0; j < features.size(); j++){
 
+			int cluster_index = findClosestCluster(features[j], cluster_mean);
+			cluster_mean_elements[cluster_index].push_back(j);
+
+		}
+
+		double total_change_of_clusters = 0;
+		//update clusters centeroid
+		for(int j = 0; j < k; j++){
+			auto mean_f = features[0] - features[0]; 
+			for(size_t i =0; i < cluster_mean_elements[j].size(); i++){
+				mean_f += features[cluster_mean_elements[j][i]];
+			}
+			mean_f = mean_f/(double)cluster_mean_elements[j].size();
+			total_change_of_clusters += norm(cluster_mean[j], mean_f);
+
+			cluster_mean[j] = mean_f;
+		}
+
+		if(total_change_of_clusters < threshold){
+			cout<<"threshold acheived!"<<endl;
+			break;
+		}
+
+		cout<<"finished iteration "<<itr++<<endl;
+	}
+
+	return cluster_mean;
+	
+}
+
+vector<vector<double>>  kmeanClusterFeaturesDouble(const vector<vector<double>> &features, int k, int max_iteration, double threshold)
+{
+ 	srand((unsigned)time(0)); 
+	vector<vector<double>> cluster_mean;
+	std::vector<int> random_indexes; 
+	random_indexes.resize(k);
+	for(int i=0; i<k; ){
+		int r = (rand()%features.size());
+    	auto it = std::find (random_indexes.begin(), random_indexes.end(), r);
+    	if(it == random_indexes.end()){
+    		i++;
+    		random_indexes.push_back(r);
+			cluster_mean.push_back(features[r]);
+    	}
+	}
+
+
+	int itr = 0;
+	while(itr < max_iteration){
+		vector<std::vector<int>> cluster_mean_elements; // this holds indexes of the feature points in cluster j<k
+		cluster_mean_elements.resize(k);
 
 		vector<int> features_index(features.size(), 0); // holds cluster of index of each feature
 
 		for(size_t j = 0; j < features.size(); j++){
 
-			//FIND THE CLUSTER THAT IS THE CLOSEST TO THE FEATURE J
-			/*
-			double minDist = 1e9;
-			int cluster_index = 0;
-			for (int i = 0; i < k ; i++){
-				double dist_to_cluster_i = norm(features[j], cluster_mean[i]);
-				if(dist_to_cluster_i < minDist){
-					minDist = dist_to_cluster_i;
-					cluster_index = i;
-				}
-			}
-			*/
-
-			int cluster_index = findClosestCluster(features[j], cluster_mean);
+			int cluster_index = findClosestClusterDouble(features[j], cluster_mean);
 
 			features_index[j] = cluster_index;
 			cluster_mean_elements[cluster_index].push_back(j);
@@ -203,12 +288,25 @@ vector<cv::Mat>  kmeanClusterFeatures(const vector<cv::Mat> &features, int k, in
 		double total_change_of_clusters = 0;
 		
 		for(int j = 0; j < k; j++){
-			auto mean_f = features[0] - features[0]; 
+			vector<double> mean_f(features[0].size(), 0); 
 			for(size_t i =0; i < cluster_mean_elements[j].size(); i++){
-				mean_f += features[cluster_mean_elements[j][i]];
+				for(int ii = 0; ii<mean_f.size();ii++){
+					mean_f[ii] += features[cluster_mean_elements[j][i]][ii];
+				}
 			}
-			mean_f = mean_f/cluster_mean_elements[j].size();
-			total_change_of_clusters += norm(cluster_mean[j], mean_f);
+
+
+			for(auto it = mean_f.begin(); it < mean_f.end(); it++){
+				*it = *it/(double)cluster_mean_elements[j].size();
+			}
+
+			double norm_f_j = 0;
+			for(int i = 0; i < mean_f.size(); i++){
+				norm_f_j += (mean_f[i]-cluster_mean[j][i])*(mean_f[i]-cluster_mean[j][i]);
+			}
+			total_change_of_clusters += sqrt(norm_f_j);
+
+			cluster_mean[j] = mean_f;
 		}
 
 		if(total_change_of_clusters < threshold){
@@ -248,4 +346,47 @@ int findClosestCluster(const cv::Mat& feature, const vector<cv::Mat>& cluster_me
 	}
 
 	return cluster_index;
+}
+
+int findClosestClusterDouble(const vector<double>& feature, const vector<vector<double>>& cluster_mean){
+	double minDist = DBL_MAX;
+	int cluster_index = 0;
+	for (size_t i = 0; i < cluster_mean.size() ; i++){
+
+		double dist_to_cluster_i = 0;
+		for(int ii = 0; ii < feature.size(); ii++){
+			dist_to_cluster_i += (feature[ii]-cluster_mean[i][ii])*(feature[ii]-cluster_mean[i][ii]);
+		}
+
+		dist_to_cluster_i = sqrt(dist_to_cluster_i);
+
+		if(dist_to_cluster_i < minDist){
+			minDist = dist_to_cluster_i;
+			cluster_index = i;
+		}
+	}
+
+	return cluster_index;
+}
+
+double cosineSimilarity(const vector<double>& a, const vector<double>& b){
+
+	double abDot = 0, a_abs = 0, b_abs = 0;
+	for(int i = 0; i < a.size(); i++){
+		abDot += a[i]*b[i];
+		a_abs += a[i]*a[i];
+		b_abs += b[i]*b[i];
+	}
+
+	return abDot/(sqrt(a_abs)*sqrt(b_abs));
+}
+
+double L1Similarity(const vector<double>& a, const vector<double>& b){
+
+	double L1norm = 0;
+	for(int i = 0; i < a.size(); i++){
+		L1norm += abs(a[i]-b[i]);
+	}
+
+	return L1norm/(double)a.size();
 }
