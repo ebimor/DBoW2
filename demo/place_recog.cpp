@@ -44,6 +44,7 @@ int findClosestCluster(const cv::Mat& feature, const vector<cv::Mat>& cluster_me
 int findClosestClusterDouble(const vector<double>& feature, const vector<vector<double>>& cluster_mean);
 double cosineSimilarity(const vector<double>& a, const vector<double>& b);
 double L1Similarity(const vector<double>& a, const vector<double>& b);
+cv::Mat calculateMeanFeature(vector<cv::Mat>& f);
 
 // ----------------------------------------------------------------------------
 
@@ -53,11 +54,21 @@ int main()
   vector<cv::Mat > featuresDB;
   loadFeatures(featuresDB);
 
-  cout<<featuresDB.size()<<endl;
+  vector<cv::Mat> df;
+  df.push_back(featuresDB[0]);
+  df.push_back(featuresDB[1]);
+
+  cout<<" featuresDB[0] : "<<featuresDB[0]<<endl;
+  cout<<" featuresDB[1] : "<<featuresDB[1]<<endl;
+
+    cv::Mat mean = calculateMeanFeature(df);
+
+  cout<<"mean is "<<mean<<endl;
+
 
     //create the BoW
-  int k = 500;
-  vector<cv::Mat> cluster_mean = kmeanClusterFeatures(featuresDB, k, 1000, 0.01);
+  int k = 1000;
+  vector<cv::Mat> cluster_mean = kmeanClusterFeatures(featuresDB, k, 1000, 1e-6);
 
   cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
@@ -96,7 +107,7 @@ int main()
   }
 
 
-  /*
+  /* Test kmean for 2D data
   vector<vector<double>> data;
   for(int k = 0 ; k< 1000; k++){
   	std::vector<double> v(2,0);
@@ -179,22 +190,26 @@ void showFeatures(const vector<cv::KeyPoint>& keypoints, const cv::Mat& image, c
 
 }
 
-double calculateDistance(const cv::Mat& f1, const cv::Mat& f2)
+cv::Mat calculateMeanFeature(vector<cv::Mat>& f)
 {
+	vector<int> mean(f[0].cols, 0);
 
-/*
-	cv::Mat r = features[1]-features[0];
-	std::cout<<norm(features[1], features[0])<<std::endl;
-
-	double L =0;
-	for(int i=0;i<features[0].cols;++i){
-		int x = (int)features[1].at<uchar>(0,i)-(int)features[0].at<uchar>(0,i);
-		L += pow( x, 2.0);
+	for(int i = 0; i < f.size(); i++){
+		
+		//mean += f[i]
+		for(int j = 0; j < f[i].cols; j++){
+			mean[j] += f[i].at<uchar>(0,j);
+		}
 	}
-	std::cout<<sqrt(L)<<std::endl;
-*/
 
-	return norm(f1, f2);
+	cv::Mat mean_f = f[0];
+	for(int i = 0; i < mean.size(); i++){
+		int d = mean[i] / f.size();
+		mean_f.at<uchar>(0,i) = (uchar)d;
+	}
+
+	return mean_f;
+
 }
 
 vector<cv::Mat>  kmeanClusterFeatures(const vector<cv::Mat> &features, int k, int max_iteration, double threshold)
@@ -230,11 +245,14 @@ vector<cv::Mat>  kmeanClusterFeatures(const vector<cv::Mat> &features, int k, in
 		double total_change_of_clusters = 0;
 		//update clusters centeroid
 		for(int j = 0; j < k; j++){
-			auto mean_f = features[0] - features[0]; 
+
+			vector<cv::Mat> cluster_j_features; 
 			for(size_t i =0; i < cluster_mean_elements[j].size(); i++){
-				mean_f += features[cluster_mean_elements[j][i]];
+				cluster_j_features.push_back(features[cluster_mean_elements[j][i]]);
 			}
-			mean_f = mean_f/(double)cluster_mean_elements[j].size();
+
+			auto mean_f = calculateMeanFeature(cluster_j_features);
+
 			total_change_of_clusters += norm(cluster_mean[j], mean_f);
 
 			cluster_mean[j] = mean_f;
