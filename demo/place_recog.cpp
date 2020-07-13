@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <vector>
+#include <fstream>
 
 // OpenCV
 #include <opencv2/core.hpp>
@@ -15,6 +16,9 @@
 #include <opencv2/features2d.hpp>
 #include <Eigen/Dense>
 #include <ctime>
+#include "opencv2/xfeatures2d.hpp"
+#include <opencv2/flann.hpp>
+
 
 using namespace Eigen;
 using namespace std;
@@ -27,7 +31,6 @@ const int NIMAGES = 4;
 typedef Matrix<int, 1, 32> MatrixOrbf;
 
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
-
 void wait()
 {
   cout << endl << "Press enter to continue" << endl;
@@ -40,37 +43,65 @@ void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out);
 vector<cv::Mat> kmeanClusterFeatures(const vector<cv::Mat> &features, int k = 500, int max_iteration = 100000, double threshold = 1.0);
 vector<vector<double>>  kmeanClusterFeaturesDouble(const vector<vector<double>> &features, int k, int max_iteration, double threshold);
 vector<double> createHistogram(const vector<cv::Mat>& features, const vector<cv::Mat>& cluster_mean);
+vector<double> createHistogram(const cv::Mat& features, const cv::Mat& cluster_mean);
 int findClosestCluster(const cv::Mat& feature, const vector<cv::Mat>& cluster_mean);
 int findClosestClusterDouble(const vector<double>& feature, const vector<vector<double>>& cluster_mean);
 double cosineSimilarity(const vector<double>& a, const vector<double>& b);
 double L1Similarity(const vector<double>& a, const vector<double>& b);
 cv::Mat calculateMeanFeature(vector<cv::Mat>& f);
+string type2str(int type);
+
+using namespace cv;
+using namespace cv::xfeatures2d;
 
 // ----------------------------------------------------------------------------
 
 int main()
 {
 
-  vector<cv::Mat > featuresDB;
-  loadFeatures(featuresDB);
+  vector<cv::Mat > featuresDB_vec;
+  featuresDB_vec.clear();
+  featuresDB_vec.reserve(NIMAGES);
 
-  vector<cv::Mat> df;
-  df.push_back(featuresDB[0]);
-  df.push_back(featuresDB[1]);
+  cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
-  cout<<" featuresDB[0] : "<<featuresDB[0]<<endl;
-  cout<<" featuresDB[1] : "<<featuresDB[1]<<endl;
+  int minHessian = 400;
+  Ptr<SURF> SURF = SURF::create( minHessian );
 
-    cv::Mat mean = calculateMeanFeature(df);
+  cv::Mat featuresDB, featuresDB_SURF;
 
-  cout<<"mean is "<<mean<<endl;
+  cout << "Extracting ORB features..." << endl;
+  for(int i = 0; i < NIMAGES; ++i)
+  {
+    stringstream ss;
+    ss << "images/image" << i << ".png";
+
+    cv::Mat image = cv::imread(ss.str(), 0);
+    cv::Mat mask;
+    vector<cv::KeyPoint> keypoints, keypoints_surf;
+    cv::Mat descriptors, descriptors_surf;
+
+    orb->detectAndCompute(image, mask, keypoints, descriptors);
+
+    SURF->detectAndCompute(image, mask, keypoints_surf, descriptors_surf);
+
+    //showFeatures(keypoints, image);
+
+    changeStructure(descriptors, featuresDB_vec);
+
+    if(i == 0){
+        	featuresDB = descriptors;
+        	featuresDB_SURF = descriptors_surf;
+    }else{
+        	cv::vconcat(featuresDB, descriptors, featuresDB);
+           	cv::vconcat(featuresDB_SURF, descriptors_surf, featuresDB_SURF);
+    }
+  }
 
 
     //create the BoW
   int k = 1000;
-  vector<cv::Mat> cluster_mean = kmeanClusterFeatures(featuresDB, k, 1000, 1e-6);
-
-  cv::Ptr<cv::ORB> orb = cv::ORB::create();
+  vector<cv::Mat> cluster_mean = kmeanClusterFeatures(featuresDB_vec, k, 1000, 1e-9);
 
   //going over the images to find histograms
   vector<vector<double>> hist_of_images;
@@ -106,33 +137,93 @@ int main()
   	cout<<endl;
   }
 
+  std::cout<<"type of feature data is: "<<type2str(featuresDB_SURF.type())<<endl;
 
-  /* Test kmean for 2D data
-  vector<vector<double>> data;
-  for(int k = 0 ; k< 1000; k++){
-  	std::vector<double> v(2,0);
-  	v[1] = rand() % 10;
-  	v[0] = rand() % 10;
-  	data.push_back(v);
+  ofstream outfile;
+  outfile.open("hists.dat"); //, std::ios::app);
+
+  int  Nclusters=500;
+  cv::Mat centroids (Nclusters,featuresDB_SURF.cols,CV_32FC1);
+  int count = cv::flann::hierarchicalClustering<cvflann::L1<float>>(featuresDB_SURF,centroids,cvflann::KMeansIndexParams(2000,11,cvflann::FLANN_CENTERS_KMEANSPP));
+
+  hist_of_images.clear();
+
+  vector<cv::Mat> centroids_vec;
+
+  outfile<<centroids<<endl;
+
+
+
+  //going over the images to find histograms
+  for(int i = 0; i < NIMAGES; ++i)
+  {
+    stringstream ss;
+    ss << "images/image" << i << ".png";
+
+    cv::Mat image = cv::imread(ss.str(), 0);
+    cv::Mat mask;
+    vector<cv::KeyPoint> keypoints_surf;
+    cv::Mat descriptors_surf;
+   	vector<cv::Mat > features;
+
+    SURF->detectAndCompute(image, mask, keypoints_surf, descriptors_surf);
+    vector<double> hist = createHistogram(descriptors_surf, centroids);
+	hist_of_images.push_back(hist);
+
+	for(int j = 0; j < hist.size(); j++)
+    	outfile<<hist[j]<<" ";
+
+    outfile<<endl;
+
+
   }
 
-  for(int k = 0 ; k< 1000; k++){
-  	std::vector<double> v(2,0);
-  	v[1] = rand() % 10+30;
-  	v[0] = rand() % 10+30;
-  	data.push_back(v);
+    outfile.close();
+
+
+  for(int i = 0; i < NIMAGES; i++){
+  	for(int j = 0; j < NIMAGES; j++){
+  		cout<<cosineSimilarity(hist_of_images[i], hist_of_images[j])<<" ";
+  	}
+  	cout<<endl;
   }
 
-  vector<vector<double>> cluster_mean = kmeanClusterFeaturesDouble(data, 2, 100000, 1);
+  cout<<endl<<endl;
 
-  cout<<cluster_mean[0][0]<<" "<<cluster_mean[0][1]<<endl;
-  cout<<cluster_mean[1][0]<<" "<<cluster_mean[1][1]<<endl;
-  */
+   for(int i = 0; i < NIMAGES; i++){
+  	for(int j = 0; j < NIMAGES; j++){
+  		cout<<L1Similarity(hist_of_images[i], hist_of_images[j])<<" ";
+  	}
+  	cout<<endl;
+  }
 
   return 0;
 }
 
 // ----------------------------------------------------------------------------
+
+string type2str(int type) {
+  string r;
+
+  uchar depth = type & CV_MAT_DEPTH_MASK;
+  uchar chans = 1 + (type >> CV_CN_SHIFT);
+
+  switch ( depth ) {
+    case CV_8U:  r = "8U"; break;
+    case CV_8S:  r = "8S"; break;
+    case CV_16U: r = "16U"; break;
+    case CV_16S: r = "16S"; break;
+    case CV_32S: r = "32S"; break;
+    case CV_32F: r = "32F"; break;
+    case CV_64F: r = "64F"; break;
+    default:     r = "User"; break;
+  }
+
+  r += "C";
+  r += (chans+'0');
+
+  return r;
+}
 
 void loadFeatures(vector<cv::Mat > &features)
 {
@@ -343,6 +434,7 @@ vector<double> createHistogram(const vector<cv::Mat>& features, const vector<cv:
 
 	vector<double> hist(cluster_mean.size(), 0);
 
+
 	for(size_t i = 0; i < features.size(); i++){
 		int cluster_index_feature_i = findClosestCluster(features[i], cluster_mean);
 		hist[cluster_index_feature_i] += (double)1.0/features.size();
@@ -407,4 +499,48 @@ double L1Similarity(const vector<double>& a, const vector<double>& b){
 	}
 
 	return L1norm/(double)a.size();
+}
+
+
+vector<double> createHistogram(const cv::Mat& features, const cv::Mat& cluster_mean){
+	
+	vector<double> hist(cluster_mean.rows, 0);
+
+	cv::flann::KMeansIndexParams indexParams(2000,11,cvflann::FLANN_CENTERS_KMEANSPP);
+	cv::flann::Index kdtree(cluster_mean, indexParams);
+
+	int maxPoints = 2;
+    cv::Mat indices, dists; //(features.rows,maxPoints);
+    //cv::Mat dists (features.rows,maxPoints);
+
+
+    kdtree.knnSearch(features, indices, dists, maxPoints);
+
+
+
+
+    //-- Filter matches using the Lowe's ratio test
+    const float ratio_thresh = 0.9f;
+    int num_good_features = 0;
+
+    for (int i = 0; i < dists.rows; i++)
+    {
+        if ((float)dists.at<uchar>(i,0) < ratio_thresh * (float)dists.at<uchar>(i,1))
+        {
+
+        	num_good_features += 1;
+			hist[(int)indices.at<uchar>(i,0)] += 1.0;
+
+
+        }
+    }
+
+    cout<<num_good_features<<" distinctive features found"<<endl;
+
+    for (size_t i = 0; i < hist.size(); i++){
+        hist[i] = hist[i]/(double)num_good_features;
+    }
+
+
+	return hist;
 }
