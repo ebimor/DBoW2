@@ -40,6 +40,7 @@ void wait()
 void loadFeatures(vector<cv::Mat > &features);
 void showFeatures(const vector<cv::KeyPoint>& keypoints, const cv::Mat& image, cv::Scalar color = (0,255,0));
 void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out);
+void changeStructure(const vector<cv::Mat>& in, cv::Mat& out);
 vector<cv::Mat> kmeanClusterFeatures(const vector<cv::Mat> &features, int k = 500, int max_iteration = 100000, double threshold = 1.0);
 vector<vector<double>>  kmeanClusterFeaturesDouble(const vector<vector<double>> &features, int k, int max_iteration, double threshold);
 vector<double> createHistogram(const vector<cv::Mat>& features, const vector<cv::Mat>& cluster_mean);
@@ -100,11 +101,19 @@ int main()
 
 
     //create the BoW
-  int k = 1000;
+  int k = 500;
   vector<cv::Mat> cluster_mean = kmeanClusterFeatures(featuresDB_vec, k, 1000, 1e-9);
 
+  cv::Mat centroid_orb;
+  changeStructure(cluster_mean, centroid_orb);
+
+  // https://stackoverflow.com/questions/29694490/flann-error-in-opencv-3
+  if(centroid_orb.type()!=CV_32F) {
+	centroid_orb.convertTo(centroid_orb, CV_32F);
+  }
+
   //going over the images to find histograms
-  vector<vector<double>> hist_of_images;
+  vector<vector<double>> hist_of_images, hist_of_images_flann;
   for(int i = 0; i < NIMAGES; ++i)
   {
   	stringstream ss;
@@ -119,8 +128,17 @@ int main()
     changeStructure(descriptors, features);
 
 	hist_of_images.push_back(createHistogram(features, cluster_mean));
+
+	// https://stackoverflow.com/questions/29694490/flann-error-in-opencv-3
+
+	if(descriptors.type()!=CV_32F) {
+    	descriptors.convertTo(descriptors, CV_32F);
+	}
+
+	hist_of_images_flann.push_back(createHistogram(descriptors, centroid_orb));
   }
 
+  cout<<"ORB cosine similarity matrix without FLANN"<<endl;
   for(int i = 0; i < NIMAGES; i++){
   	for(int j = 0; j < NIMAGES; j++){
   		cout<<cosineSimilarity(hist_of_images[i], hist_of_images[j])<<" ";
@@ -130,6 +148,7 @@ int main()
 
   cout<<endl<<endl;
 
+  cout<<"ORB L1 similarity matrix without FLANN"<<endl;
    for(int i = 0; i < NIMAGES; i++){
   	for(int j = 0; j < NIMAGES; j++){
   		cout<<L1Similarity(hist_of_images[i], hist_of_images[j])<<" ";
@@ -137,7 +156,16 @@ int main()
   	cout<<endl;
   }
 
-  std::cout<<"type of feature data is: "<<type2str(featuresDB_SURF.type())<<endl;
+  cout<<endl<<endl;
+
+  cout<<"ORB cosine similarity matrix with FLANN"<<endl;
+  for(int i = 0; i < NIMAGES; i++){
+  	for(int j = 0; j < NIMAGES; j++){
+  		cout<<cosineSimilarity(hist_of_images_flann[i], hist_of_images_flann[j])<<" ";
+  	}
+  	cout<<endl;
+  }
+
 
   ofstream outfile;
   outfile.open("hists.dat"); //, std::ios::app);
@@ -190,7 +218,7 @@ int main()
 
   cout<<endl<<endl;
 
-   for(int i = 0; i < NIMAGES; i++){
+  for(int i = 0; i < NIMAGES; i++){
   	for(int j = 0; j < NIMAGES; j++){
   		cout<<L1Similarity(hist_of_images[i], hist_of_images[j])<<" ";
   	}
@@ -264,7 +292,20 @@ void changeStructure(const cv::Mat &plain, vector<cv::Mat> &out)
     out.push_back(plain.row(i));
 
   }
-  std::cout<<"added  "<<plain.rows<<" descriptors"<<std::endl;
+  //std::cout<<"added  "<<plain.rows<<" descriptors"<<std::endl;
+
+}
+
+void changeStructure(const vector<cv::Mat>& in, cv::Mat& out)
+{
+
+  out = in[0];
+
+  for(int i = 1; i < in.size(); ++i)
+  {
+      cv::vconcat(out, in[i], out);
+  }
+  //std::cout<<"created a matrix of "<<out.rows<<" descriptors"<<std::endl;
 
 }
 
@@ -507,6 +548,7 @@ vector<double> createHistogram(const cv::Mat& features, const cv::Mat& cluster_m
 	vector<double> hist(cluster_mean.rows, 0);
 
 	cv::flann::KMeansIndexParams indexParams(2000,11,cvflann::FLANN_CENTERS_KMEANSPP);
+
 	cv::flann::Index kdtree(cluster_mean, indexParams);
 
 	int maxPoints = 2;
