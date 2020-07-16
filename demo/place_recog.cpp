@@ -26,7 +26,7 @@ using namespace std;
 // - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - 
 
 // number of training images
-const int NIMAGES = 4;
+const int NIMAGES = 8;
 
 typedef Matrix<int, 1, 32> MatrixOrbf;
 
@@ -66,25 +66,21 @@ int main()
 
   cv::Ptr<cv::ORB> orb = cv::ORB::create();
 
-  int minHessian = 400;
-  Ptr<SURF> SURF = SURF::create( minHessian );
-
-  cv::Mat featuresDB, featuresDB_SURF;
+  cv::Mat featuresDB;
 
   cout << "Extracting ORB features..." << endl;
   for(int i = 0; i < NIMAGES; ++i)
   {
     stringstream ss;
-    ss << "images/image" << i << ".png";
+    ss << "camera/image" << i << ".jpg";
 
     cv::Mat image = cv::imread(ss.str(), 0);
     cv::Mat mask;
-    vector<cv::KeyPoint> keypoints, keypoints_surf;
-    cv::Mat descriptors, descriptors_surf;
+    vector<cv::KeyPoint> keypoints;
+    cv::Mat descriptors;
 
     orb->detectAndCompute(image, mask, keypoints, descriptors);
 
-    SURF->detectAndCompute(image, mask, keypoints_surf, descriptors_surf);
 
     //showFeatures(keypoints, image);
 
@@ -92,10 +88,8 @@ int main()
 
     if(i == 0){
         	featuresDB = descriptors;
-        	featuresDB_SURF = descriptors_surf;
     }else{
         	cv::vconcat(featuresDB, descriptors, featuresDB);
-           	cv::vconcat(featuresDB_SURF, descriptors_surf, featuresDB_SURF);
     }
   }
 
@@ -117,7 +111,7 @@ int main()
   for(int i = 0; i < NIMAGES; ++i)
   {
   	stringstream ss;
-    ss << "images/image" << i << ".png";
+    ss << "camera/image" << i << ".jpg";
     cv::Mat image = cv::imread(ss.str(), 0);
     cv::Mat mask;
     vector<cv::KeyPoint> keypoints;
@@ -140,8 +134,19 @@ int main()
 
   cout<<"ORB cosine similarity matrix without FLANN"<<endl;
   for(int i = 0; i < NIMAGES; i++){
+  	vector<double> sim;
   	for(int j = 0; j < NIMAGES; j++){
-  		cout<<cosineSimilarity(hist_of_images[i], hist_of_images[j])<<" ";
+  		sim.push_back(cosineSimilarity(hist_of_images[i], hist_of_images[j]));
+  	}
+
+  	vector<size_t> idx(sim.size());
+    iota(idx.begin(), idx.end(), 0);
+
+  	sort(idx.begin(), idx.end(), [&sim](size_t i1, size_t i2){ return sim[i1] > sim[i2];});
+
+    cout << "Searching for Image " << i << ".jpg " << endl;
+  	for(int j = 0; j< 4; j++){
+  		cout << "Image " << i << " vs Image " << idx[j] << ": " << sim[idx[j]] << endl;
   	}
   	cout<<endl;
   }
@@ -160,70 +165,23 @@ int main()
 
   cout<<"ORB cosine similarity matrix with FLANN"<<endl;
   for(int i = 0; i < NIMAGES; i++){
+  	vector<double> sim;
   	for(int j = 0; j < NIMAGES; j++){
-  		cout<<cosineSimilarity(hist_of_images_flann[i], hist_of_images_flann[j])<<" ";
+  		sim.push_back(cosineSimilarity(hist_of_images_flann[i], hist_of_images_flann[j]));
+  	}
+
+  	vector<size_t> idx(sim.size());
+    iota(idx.begin(), idx.end(), 0);
+
+  	sort(idx.begin(), idx.end(), [&sim](size_t i1, size_t i2){ return sim[i1] > sim[i2];});
+
+    cout << "Searching for Image " << i << ".jpg " << endl;
+  	for(int j = 0; j< 4; j++){
+  		cout << "Image " << i << " vs Image " << idx[j] << ": " << sim[idx[j]] << endl;
   	}
   	cout<<endl;
   }
 
-
-  ofstream outfile;
-  outfile.open("hists.dat"); //, std::ios::app);
-
-  int  Nclusters=500;
-  cv::Mat centroids (Nclusters,featuresDB_SURF.cols,CV_32FC1);
-  int count = cv::flann::hierarchicalClustering<cvflann::L1<float>>(featuresDB_SURF,centroids,cvflann::KMeansIndexParams(2000,11,cvflann::FLANN_CENTERS_KMEANSPP));
-
-  hist_of_images.clear();
-
-  vector<cv::Mat> centroids_vec;
-
-  outfile<<centroids<<endl;
-
-
-
-  //going over the images to find histograms
-  for(int i = 0; i < NIMAGES; ++i)
-  {
-    stringstream ss;
-    ss << "images/image" << i << ".png";
-
-    cv::Mat image = cv::imread(ss.str(), 0);
-    cv::Mat mask;
-    vector<cv::KeyPoint> keypoints_surf;
-    cv::Mat descriptors_surf;
-   	vector<cv::Mat > features;
-
-    SURF->detectAndCompute(image, mask, keypoints_surf, descriptors_surf);
-    vector<double> hist = createHistogram(descriptors_surf, centroids);
-	hist_of_images.push_back(hist);
-
-	for(int j = 0; j < hist.size(); j++)
-    	outfile<<hist[j]<<" ";
-
-    outfile<<endl;
-
-
-  }
-
-    outfile.close();
-
-
-  for(int i = 0; i < NIMAGES; i++){
-  	for(int j = 0; j < NIMAGES; j++){
-  		cout<<cosineSimilarity(hist_of_images[i], hist_of_images[j])<<" ";
-  	}
-  	cout<<endl;
-  }
-
-  cout<<endl<<endl;
-
-  for(int i = 0; i < NIMAGES; i++){
-  	for(int j = 0; j < NIMAGES; j++){
-  		cout<<L1Similarity(hist_of_images[i], hist_of_images[j])<<" ";
-  	}
-  	cout<<endl;
-  }
 
   return 0;
 }
