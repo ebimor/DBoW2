@@ -12,6 +12,7 @@
 
 // OpenCV
 #include <opencv2/core.hpp>
+#include "opencv2/imgproc/imgproc.hpp"
 #include <opencv2/highgui.hpp>
 #include <opencv2/features2d.hpp>
 #include <Eigen/Dense>
@@ -74,7 +75,10 @@ int main()
     stringstream ss;
     ss << "camera/image" << i << ".jpg";
 
-    cv::Mat image = cv::imread(ss.str(), 0);
+    cv::Mat image_org = cv::imread(ss.str(), 0);
+    cv::Size size(680, 320);//the dst image size,e.g.100x100
+	cv::Mat image;
+	cv::resize(image_org,image,size);//resize image
     cv::Mat mask;
     vector<cv::KeyPoint> keypoints;
     cv::Mat descriptors;
@@ -82,7 +86,7 @@ int main()
     orb->detectAndCompute(image, mask, keypoints, descriptors);
 
 
-    //showFeatures(keypoints, image);
+    showFeatures(keypoints, image);
 
     changeStructure(descriptors, featuresDB_vec);
 
@@ -112,7 +116,10 @@ int main()
   {
   	stringstream ss;
     ss << "camera/image" << i << ".jpg";
-    cv::Mat image = cv::imread(ss.str(), 0);
+    cv::Mat image_org = cv::imread(ss.str(), 0);
+    cv::Size size(320,680);//the dst image size,e.g.100x100
+	cv::Mat image;
+	cv::resize(image_org,image,size);//resize image
     cv::Mat mask;
     vector<cv::KeyPoint> keypoints;
     cv::Mat descriptors;
