@@ -66,6 +66,7 @@ int main()
   featuresDB_vec.reserve(NIMAGES);
 
   cv::Ptr<cv::ORB> orb = cv::ORB::create();
+  cv::Size size(320, 450);//the dst image size,e.g.100x100
 
   cv::Mat featuresDB;
 
@@ -76,7 +77,7 @@ int main()
     ss << "camera/image" << i << ".jpg";
 
     cv::Mat image_org = cv::imread(ss.str(), 0);
-    cv::Size size(680, 320);//the dst image size,e.g.100x100
+    cout<<image_org.rows<<" x "<<image_org.cols<<endl;
 	cv::Mat image;
 	cv::resize(image_org,image,size);//resize image
     cv::Mat mask;
@@ -86,7 +87,7 @@ int main()
     orb->detectAndCompute(image, mask, keypoints, descriptors);
 
 
-    showFeatures(keypoints, image);
+    //showFeatures(keypoints, image);
 
     changeStructure(descriptors, featuresDB_vec);
 
@@ -117,7 +118,6 @@ int main()
   	stringstream ss;
     ss << "camera/image" << i << ".jpg";
     cv::Mat image_org = cv::imread(ss.str(), 0);
-    cv::Size size(320,680);//the dst image size,e.g.100x100
 	cv::Mat image;
 	cv::resize(image_org,image,size);//resize image
     cv::Mat mask;
@@ -186,6 +186,34 @@ int main()
   	for(int j = 0; j< 4; j++){
   		cout << "Image " << i << " vs Image " << idx[j] << ": " << sim[idx[j]] << endl;
   	}
+
+	double fontScale = 0.3;
+	
+  	stringstream ss_i, display_text_i;
+    ss_i << "camera/image" << i << ".jpg";
+    cv::Mat image_org_i = cv::imread(ss_i.str(), 0);
+	cv::Mat image_i;
+	cv::resize(image_org_i,image_i,size);//resize image
+	display_text_i<<"Image "<<i;
+    cv::putText(image_i, display_text_i.str().c_str(), cv::Point(0,410),cv::FONT_HERSHEY_TRIPLEX,fontScale,cv::Scalar(255,255,255,125),1);
+
+
+
+  	stringstream ss_j, display_text_j;
+    ss_j << "camera/image" << idx[1] << ".jpg";
+    cv::Mat image_org_j = cv::imread(ss_j.str(), 0);
+	cv::Mat image_j;
+	cv::resize(image_org_j,image_j,size);//resize image
+	display_text_j<<"Image "<<idx[1]<<" with similarity "<<sim[idx[1]];
+    cv::putText(image_j, display_text_j.str().c_str(), cv::Point(0,410),cv::FONT_HERSHEY_TRIPLEX,fontScale,cv::Scalar(255,255,255,125),1);
+
+   	cv::hconcat(image_i, image_j, image_i);
+
+
+
+   	cv::imshow("Matches", image_i);
+    cv::waitKey(-1);
+
   	cout<<endl;
   }
 
